@@ -20,6 +20,8 @@ int main(int argc, char *argv[])
     //  reverse sort lambda: [](float const& a, float const& b){ return a > b; }
 
 	srand(time(0)); // initialize PRNG
+
+    std::cout << "Testing parallel functions compared to their std::... alternatives" << std::endl;
 	
 	std::vector<float> syncfloatvec(SIZE);
 	std::generate(syncfloatvec.begin(), syncfloatvec.end(), randfloat);

@@ -5,8 +5,6 @@
 #include <utility>
 #include <atomic>
 
-#include "mathext.hpp"
-
 #define FS_DEF 115 // Good on 10000000 ints
 
 namespace parallel {
@@ -278,7 +276,7 @@ namespace parallel {
         int lnhalf = length/2;
         Iter split = begin;
         std::advance(split, lnhalf); // split up the list
-		if (maxthreadcount >= 2)
+        if (maxthreadcount >= 2 || maxthreadcount < 0)
 		{
             std::vector<boost::shared_future<void>> results;
             maxthreadcount -= 2;
@@ -288,7 +286,7 @@ namespace parallel {
             results.push_back(fu2);
             boost::wait_for_all(results.begin(), results.end());
             std::inplace_merge(begin, split, end, smaller);
-		}
+        } // Using only one thread for maxthreadcount == 1 would be pointless and only produce time loss launching the thread
         else
         {
             std::sort(begin, end, smaller);
@@ -297,8 +295,7 @@ namespace parallel {
 
     template <typename Iter, typename F> void p_sort_allthreads(Iter begin, Iter end, F smaller) // uses threads down to the bottom "leaf" of the "tree" created by merge sort
     {
-        int needs_less_threads_than = uplog2(std::distance(begin, end));
-        p_sort_nthreads(begin, end, smaller, needs_less_threads_than);
+        p_sort_nthreads(begin, end, smaller, -1); // -1 means to always use threads
     }
 
     template <typename Iter, typename F> void p_sort_hwthreads(Iter begin, Iter end, F smaller) // uses boost::thread::hardware_concurrency() threads, then uses std::sort
