@@ -15,8 +15,10 @@ float randfloat()
 int main(int argc, char *argv[])
 {
 	// Inlined parameters:
-	//  for_each lambda: [](float& x){ x *= std::cos(std::tan(std::sin(x-3.1415926536+21)*42)); };
-	
+    //  for_each lambda:     [](float& x){ x *= std::cos(std::tan(std::sin(x-3.1415926536+21)*42)); };
+    //  sort lambda:         [](float const& a, float const& b){ return a < b; }
+    //  reverse sort lambda: [](float const& a, float const& b){ return a > b; }
+
 	srand(time(0)); // initialize PRNG
 	
 	std::vector<float> syncfloatvec(SIZE);
@@ -34,17 +36,8 @@ int main(int argc, char *argv[])
 	std::chrono::high_resolution_clock::time_point pst;
 	std::chrono::high_resolution_clock::time_point psp;
 	
-	int stp = 0;
-	
-	if (argc < 2)
-	{
-		std::cerr << "Not enough arguments: " << argv[0] << " parallel_find_steps" << std::endl;
-		abort();
-	}
-	else
-	{
-		stp = atoi(argv[1]);
-	}
+    int stp = FS_DEF;
+
 
 	// normal
 
@@ -68,7 +61,19 @@ int main(int argc, char *argv[])
 	std::find(syncints.begin(), syncints.end(), searchfor);
 	psp = std::chrono::high_resolution_clock::now();
 	std::cout << (std::chrono::nanoseconds(psp - pst).count()/1000) << " µs [microseconds]" << std::endl;
+
+    std::cout << "\tTesting std::sort took ";
+    pst = std::chrono::high_resolution_clock::now();
+    std::sort(syncfloatvec.begin(), syncfloatvec.end(), [](float const& a, float const& b){ return a < b; });
+    psp = std::chrono::high_resolution_clock::now();
+    std::cout << (std::chrono::nanoseconds(psp - pst).count()/1000) << " µs [microseconds]" << std::endl;
 	
+    std::cout << "\tTesting std::sort - reversing order took ";
+    pst = std::chrono::high_resolution_clock::now();
+    std::sort(syncfloatvec.begin(), syncfloatvec.end(), [](float const& a, float const& b){ return a > b; });
+    psp = std::chrono::high_resolution_clock::now();
+    std::cout << (std::chrono::nanoseconds(psp - pst).count()/1000) << " µs [microseconds]" << std::endl;
+
     stop = std::chrono::high_resolution_clock::now(); // Stop timing
 	std::cout << "Finished synchronous tasks: Time: " << (std::chrono::nanoseconds(stop - start).count()/1000) << "µs [microseconds]" << std::endl;
 	
@@ -95,6 +100,18 @@ int main(int argc, char *argv[])
 	psp = std::chrono::high_resolution_clock::now();
 	std::cout << (std::chrono::nanoseconds(psp - pst).count()/1000) << " µs [microseconds]" << std::endl;
     
+    std::cout << "\tTesting parallel::p_sort_hwthreads took ";
+    pst = std::chrono::high_resolution_clock::now();
+    parallel::p_sort_hwthreads(asyncfloatvec.begin(), asyncfloatvec.end(), [](float const& a, float const& b){ return a < b; });
+    psp = std::chrono::high_resolution_clock::now();
+    std::cout << (std::chrono::nanoseconds(psp - pst).count()/1000) << " µs [microseconds]" << std::endl;
+
+    std::cout << "\tTesting parallel::p_sort_allthreads - reversing order took ";
+    pst = std::chrono::high_resolution_clock::now();
+    parallel::p_sort_allthreads(asyncfloatvec.begin(), asyncfloatvec.end(), [](float const& a, float const& b){ return a > b; });
+    psp = std::chrono::high_resolution_clock::now();
+    std::cout << (std::chrono::nanoseconds(psp - pst).count()/1000) << " µs [microseconds]" << std::endl;
+
     stop = std::chrono::high_resolution_clock::now(); // Stop timing
 	std::cout << "Finished parallel tasks: Time: " << (std::chrono::nanoseconds(stop - start).count()/1000) << "µs [microseconds]" << std::endl;
 	return 0;

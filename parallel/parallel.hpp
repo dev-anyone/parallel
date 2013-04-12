@@ -12,6 +12,7 @@
 namespace parallel {
 
 	// Helper functor structs
+    template <typename Iter, typename F> void p_sort_nthreads(Iter begin, Iter end, F smaller, unsigned maxthreadcount); // to allow p_sort_helper_s to call this function
 	
 	template <typename Iter, typename F> struct p_for_each_helper_s {
 		p_for_each_helper_s(Iter b, Iter em, F f) : begin(b), endmid(em), func(f) {}
@@ -189,7 +190,16 @@ namespace parallel {
 		F func;
 	};
 	
-	template <typename Seq, typename F>
+    template <typename Iter, typename F> struct p_sort_helper_s {
+        p_sort_helper_s<Iter, F>(Iter begin, Iter end, F fn, unsigned nt) : b(begin), e(end), f(fn), t(nt) {}
+        void operator()() {
+            p_sort_nthreads(b, e, std::forward<F>(f), t);
+        }
+        Iter b;
+        Iter e;
+        F f;
+        unsigned t;
+    };
 
 	// Functions
 	
@@ -259,40 +269,40 @@ namespace parallel {
 			return end;
 		}
 	}
-
-	template <typename Seq, typename F> Seq p_sort_allthreads(Seq s, F&& smaller) // uses threads down to the bottom leaf
-	{
-		int needs_less_threads_than = log2(std::distance(s.begin(), s.end()));
-		return p_sort_nthreads(s, std::forward<F>(smaller), needs_less_threads_than);
-	}
 	
-	template <typename Seq, typename F> Seq p_sort_hwthreads(Seq s, F&& smaller) // uses boost::thread::hardware_concurrency() threads, then uses std::sort
-	{
-		return p_sort_nthreads(s, std::forward<F>(smaller), boost::thread::hardware_concurrency());
-	}
-	
-	template <typename Seq, typename F> Seq p_sort_nthreads(Seq s, F&& smaller, unsigned maxthreadcount)
-	{
-		// Merge Sort
-		typedef Seq::iterator Iter;
-		Iter begin = s.begin();
-		Iter end = s.end();
+    template <typename Iter, typename F> void p_sort_nthreads(Iter begin, Iter end, F smaller, unsigned maxthreadcount)
+    {
 		int length = std::distance(begin, end);
+        if (length == 1)
+            return;
+        int lnhalf = length/2;
+        Iter split = begin;
+        std::advance(split, lnhalf); // split up the list
 		if (maxthreadcount >= 2)
 		{
-			std::vector<boost::shared_future<Seq>> results;
-			boost::shared_future<Seq> fu1 = boost::async(p_
-			maxthreadcount -= 2;
+            std::vector<boost::shared_future<void>> results;
+            maxthreadcount -= 2;
+            boost::shared_future<void> fu1 = boost::async(p_sort_helper_s<Iter, F>(begin, split, smaller, maxthreadcount/2));
+            results.push_back(fu1);
+            boost::shared_future<void> fu2 = boost::async(p_sort_helper_s<Iter, F>(split, end, smaller, maxthreadcount/2));
+            results.push_back(fu2);
+            boost::wait_for_all(results.begin(), results.end());
+            std::inplace_merge(begin, split, end, smaller);
 		}
+        else
+        {
+            std::sort(begin, end, smaller);
+        }
 	}
-	
-	// p_sort
-	//  parallel std::sort split on k cores -> merge
-	//  
-	// p_partial_sort
-	//  ??
-	//
-	// p_binary_search
-	//  ??
-	// Fibonacci parallelisieren
+
+    template <typename Iter, typename F> void p_sort_allthreads(Iter begin, Iter end, F smaller) // uses threads down to the bottom "leaf" of the "tree" created by merge sort
+    {
+        int needs_less_threads_than = uplog2(std::distance(begin, end));
+        p_sort_nthreads(begin, end, smaller, needs_less_threads_than);
+    }
+
+    template <typename Iter, typename F> void p_sort_hwthreads(Iter begin, Iter end, F smaller) // uses boost::thread::hardware_concurrency() threads, then uses std::sort
+    {
+        p_sort_nthreads(begin, end, smaller, boost::thread::hardware_concurrency());
+    }
 }
