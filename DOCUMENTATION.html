@@ -11,7 +11,7 @@
         <p><a href="#parallel_parallel_hpp" target="_self">parallel/parallel.hpp</a><br />
         <a href="#test-parallel_cpp">test-parallel.cpp</a></p>
         <h3><a name="parallel_parallel_hpp"></a>parallel/parallel.hpp</h3>
-        <p>Structures</p>
+        <b>Structures</b>
         <ul>
         <li>p_for_each_helper_s</li>
         <li>p_for_each_forward_helper_s</li>
@@ -23,7 +23,7 @@
         </ul>
         <p>These are functors used in the different threads. Only p_find_*::operator()() contain relevant code. They should never be addressed directly, use the appropriate functions instead</p>
         <p>&nbsp;</p>
-        <p>Functions</p>
+        <b>Functions</b>
         <pre>template &lt;typename Iter, typename F&gt; void p_for_each(Iter begin, Iter end, F&amp;&amp; func)</pre>
         <p style="padding-left: 30px;">Applies <code>func</code> inplace to all items on the iterator between <code>begin</code> and <code>end</code></p>
         <p style="padding-left: 30px;">Types:</p>
@@ -44,9 +44,8 @@
         <p style="padding-left: 60px;"><code>Iter end</code> : iterator pointing to the end</p>
         <p style="padding-left: 60px;"><code>F func</code> : A functor which will, when applied to any item on the list, return true, if the item matches the search parameters</p>
         <p style="padding-left: 60px;">[int step] (optional): indicates how many elements will be searched before checking if anything has been found by another thread.</p>
-        <p style="padding-left: 60px;">&nbsp;</p>
-        <pre>template &lt;typename Iter, typename F&gt; Iter p_find_first(Iter begin, Iter end, F&amp;&amp; func &nbsp;[, int step])</pre>
         <p>&nbsp;</p>
+        <pre>template &lt;typename Iter, typename F&gt; Iter p_find_first(Iter begin, Iter end, F&amp;&amp; func &nbsp;[, int step])</pre>
         <p style="padding-left: 30px;">Find the first occurence&nbsp;of anything between begin and end returning true when func is called on it.</p>
         <p style="padding-left: 30px;">Types:</p>
         <p style="padding-left: 60px;"><code>Iter</code> : any iterator</p>
@@ -57,6 +56,7 @@
         <p style="padding-left: 60px;"><code>F func</code>  : A functor which will, when applied to any item on the list, return true, if the item matches the search parameters</p>
         <p style="padding-left: 60px;">[int step] (optional): indicates how many elements will be searched before checking if anything has been found by another thread.</p>
         <p style="padding-left: 60px;">&nbsp;</p>
+        <p>&nbsp;</p>
         <pre>template &lt;typename Iter, typename F&gt; void p_sort_nthreads(Iter begin, Iter end, F smaller, unsigned maxthreadcount)</pre>
         <p style="padding-left: 30px;">Sort the list/vector/... in place from begin to end using the functor smaller to determine which of two elements is smaller (ie. to be sorted to the front in the result), using at a maximum maxthreadcount threads</p>
         <p style="padding-left: 30px;">Types:</p>
@@ -71,6 +71,7 @@
         <p style="padding-left: 30px;">Like <code>p_sort_nthreads</code>, but determining the maximum thread count using <code>boost::thread::hardware_concurrency()</code></p>
         <pre>template &lt;typename Iter, typename F&gt; void p_sort_allthreads(Iter begin, Iter end, F smaller)</pre>
         <p style="padding-left: 30px;">Like <code>p_sort_nthreads</code>, but using as many threads as necessary. (<code>p_sort_nthreads</code> with <code>maxthreadcount = -1</code>)</p>
+        <p>&nbsp;</p>
         <h3><a name="test-parallel_cpp"></a>test-parallel.cpp</h3>
         <p>A testing tool for comparing parallel and normal functions regarding the time they take to run</p>
     </body>
