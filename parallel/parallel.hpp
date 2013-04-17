@@ -6,11 +6,12 @@
 #include <atomic>
 
 #define FS_DEF 115 // Good on 10000000 ints
+#define SIL_DEF 1000 // Good on   "    ints
 
 namespace parallel {
 
 	// Helper functor structs
-    template <typename Iter, typename F> void p_sort_nthreads(Iter begin, Iter end, F smaller, unsigned maxthreadcount); // to allow p_sort_helper_s to call this function
+    //template <typename Iter, typename F> void p_sort_nthreads(Iter begin, Iter end, F smaller, unsigned maxthreadcount); // to allow p_sort_helper_s to call this function
 	
 	template <typename Iter, typename F> struct p_for_each_helper_s {
 		p_for_each_helper_s(Iter b, Iter em, F f) : begin(b), endmid(em), func(f) {}
@@ -187,17 +188,7 @@ namespace parallel {
 		int id;
 		F func;
 	};
-	
-    template <typename Iter, typename F> struct p_sort_helper_s {
-        p_sort_helper_s<Iter, F>(Iter begin, Iter end, F fn, unsigned nt) : b(begin), e(end), f(fn), t(nt) {}
-        void operator()() {
-            p_sort_nthreads(b, e, std::forward<F>(f), t);
-        }
-        Iter b;
-        Iter e;
-        F f;
-        unsigned t;
-    };
+
 
 	// Functions
 	
@@ -268,23 +259,33 @@ namespace parallel {
 		}
 	}
 	
-    template <typename Iter, typename F> void p_sort_nthreads(Iter begin, Iter end, F smaller, unsigned maxthreadcount)
+    template <typename Iter, typename F> void p_sort_nthreads(Iter begin, Iter end, F smaller, unsigned maxthreadcount, int SKIP_IF_LESS=SIL_DEF) // SKIP_IF_LESS: Do not spawn threads if the length is smaller
     {
+        bool cond_threads = (maxthreadcount >= 2);
 		int length = std::distance(begin, end);
+        if (length < SKIP_IF_LESS)
+            cond_threads=false; // Don't use threads - too much overhead
         if (length == 1)
             return;
         int lnhalf = length/2;
         Iter split = begin;
         std::advance(split, lnhalf); // split up the list
-        if (maxthreadcount >= 2 || maxthreadcount < 0)
-		{
-            std::vector<boost::shared_future<void>> results;
-            maxthreadcount -= 2;
-            boost::shared_future<void> fu1 = boost::async(p_sort_helper_s<Iter, F>(begin, split, smaller, maxthreadcount/2));
-            results.push_back(fu1);
-            boost::shared_future<void> fu2 = boost::async(p_sort_helper_s<Iter, F>(split, end, smaller, maxthreadcount/2));
-            results.push_back(fu2);
-            boost::wait_for_all(results.begin(), results.end());
+        if (maxthreadcount < 0 || cond_threads)
+        {
+            unsigned new_mxthreadcount;
+            if (cond_threads)
+            {
+                maxthreadcount -= 2;
+                new_mxthreadcount = maxthreadcount / 2;
+            }
+            else
+            {
+                new_mxthreadcount = -1; // always use threads.
+            }
+            //std::bind(std::function<void(Iter, Iter, F, unsigned)>(p_sort_nthreads), begin, split, smaller, maxthreadcount/2) // did not work
+            boost::shared_future<void> fu = boost::async([&begin, &split, smaller, maxthreadcount](){p_sort_nthreads(begin, split, smaller, maxthreadcount/2);});
+            p_sort_nthreads(split, end, smaller, maxthreadcount/2);
+            fu.get(); // also waits (like fu.wait())
             std::inplace_merge(begin, split, end, smaller);
         } // Using only one thread for maxthreadcount == 1 would be pointless and only produce time loss launching the thread
         else
@@ -293,13 +294,14 @@ namespace parallel {
         }
 	}
 
-    template <typename Iter, typename F> void p_sort_allthreads(Iter begin, Iter end, F smaller) // uses threads down to the bottom "leaf" of the "tree" created by merge sort
+    // removed - error due to too many threads.
+    /*template <typename Iter, typename F> void p_sort_allthreads(Iter begin, Iter end, F smaller) // uses threads down to the bottom "leaf" of the "tree" created by merge sort
     {
         p_sort_nthreads(begin, end, smaller, -1); // -1 means to always use threads
-    }
+    }*/
 
-    template <typename Iter, typename F> void p_sort_hwthreads(Iter begin, Iter end, F smaller) // uses boost::thread::hardware_concurrency() threads, then uses std::sort
+    template <typename Iter, typename F> void p_sort_hwthreads(Iter begin, Iter end, F smaller, int SKIP_IF_LESS=SIL_DEF) // uses boost::thread::hardware_concurrency() threads, then uses std::sort
     {
-        p_sort_nthreads(begin, end, smaller, boost::thread::hardware_concurrency());
+        p_sort_nthreads(begin, end, smaller, boost::thread::hardware_concurrency(), SKIP_IF_LESS);
     }
 }

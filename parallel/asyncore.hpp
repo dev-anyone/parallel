@@ -1,6 +1,7 @@
 #ifndef ASYNCORE_HPP
 #define ASYNCORE_HPP
 
+#include <utility>
 #include <functional>
 #include <atomic>
 #include <algorithm>
@@ -11,46 +12,45 @@
 #include <boost/shared_ptr.hpp>
 #include <boost/chrono/chrono.hpp>
 #include <boost/enable_shared_from_this.hpp>
-#include <boost/mpl/list.hpp>
+#include <boost/lockfree/queue.hpp>
 #include <boost/any.hpp>
 
 namespace parallel { namespace asyncore {
 
-// _master base classes are to avoid recursive inclusion
-class _master_task {
-public:
-    _master_task() {}
-    ~_master_task() {}
-    void execute() { std::cout << "Trying to call _master_task.execute() - Fix your code to call Task<T>.execute()" << std::endl; }
-};
+typedef std::function<void()> voidfn;
+typedef std::function<void(unsigned)> callbackfn;
 
-class Task {// : public _master_task{
+// _master base classes are to avoid recursive inclusion
+
+class Task {
 public:
-    Task() {} // Empty constructor for _master_dispatcher
-    Task(std::function<boost::any()> act, std::function<void(boost::any)> clb) : action(act), callback(clb) {} // Normal constructor
-    Task(Task const& other) { // Copy constructor
+    Task(voidfn&& act, callbackfn&& clb, unsigned taskid) : action(std::forward<voidfn>(act)), callback(std::forward<callbackfn>(clb)), id(taskid) {if (this->callback == nullptr) { std::cerr << "N" << std::endl; throw; } else if (this->action == nullptr) { std::cerr << "N" << std::endl; throw; }} // Normal constructor
+    Task(Task const& other) { // Copy constructor for boost::lockfree::queue
         action = other.action;
         callback = other.callback;
+        if (this->callback == nullptr) { std::cerr << "N" << std::endl; throw; } else if (this->action == nullptr) { std::cerr << "N" << std::endl; throw; }
     }
-    void execute() {
-        callback(action());
+    void operator()() {
+        if (this->callback == nullptr) { std::cerr << "N" << std::endl; throw; } else if (this->action == nullptr) { std::cerr << "N" << std::endl; throw; }
+        this->action();
+        this->callback(id);
     }
-    //Task<T>* clone() const { return new Task<T>(*this); }
 
-    std::function<boost::any()> action;
-    std::function<void(boost::any)> callback;
+    voidfn action;
+    callbackfn callback;
+    unsigned id;
 };
 
 class _master_dispatcher {
 public:
-    std::queue<_master_task*> tasks;
+    boost::lockfree::queue<Task*, boost::lockfree::capacity<1024>> tasks;
     std::atomic<int> qsize;
     std::atomic<bool> quit;
     _master_dispatcher() {}
     _master_dispatcher(int thread_count, int worker_sleep_ms) {}
     ~_master_dispatcher() {}
-    void post(Task *t) {}
-    boost::any next_task() {return _master_task();}
+    void post(Task t) {}
+    void next_task(Task *t) {}
 };
 
 class TaskWorker {
@@ -58,25 +58,26 @@ private:
     boost::shared_ptr<_master_dispatcher> _dispatcher;
     int _sleep;
     int _id;
+    int _prev_id;
 public:
-    TaskWorker(boost::shared_ptr<_master_dispatcher> d, int sleep_ms, int id) : _sleep(sleep_ms), _id(id), _dispatcher(d) {std::cout << "Init" << std::endl;}
+    TaskWorker(boost::shared_ptr<_master_dispatcher> d, int sleep_ms, int id) : _sleep(sleep_ms), _id(id), _dispatcher(d) {}
     void operator()() {
         while (!((*_dispatcher).quit))
         {
+            Task *task;
             try {
-                boost::any t = (*_dispatcher).next_task();
-                try {
-                    Task task = boost::any_cast<Task>(t);
-                    task.execute();
-                }
-                catch (...) {
-                    std::cerr << "Error casting from boost::any to Task" << std::endl;
-                    abort();
+                (*_dispatcher).next_task(task);
+                if (_prev_id == task->id) { // Do not repeat-execute (bugfix)
+                    boost::this_thread::sleep_for(boost::chrono::milliseconds(_sleep));
+                    continue;
                 }
             }
             catch (...) {
                 boost::this_thread::sleep_for(boost::chrono::milliseconds(_sleep));
+                continue;
             }
+            _prev_id = task->id;
+            (*task)();
         }
         _dispatcher.reset(); // remove the keepalive shared_ptr
         delete this;
@@ -87,17 +88,15 @@ public:
 
 class TaskDispatcher : public _master_dispatcher, public boost::enable_shared_from_this<TaskDispatcher> {
 public:
-    std::queue<boost::any> tasks;
-    std::atomic<int> qsize;
+    boost::lockfree::queue<Task*, boost::lockfree::capacity<1024>> tasks; // Fixed size, so no initialization necessary (it would need to happen when declaring the queue, because there is no assignment operator, but this cannot be done because it is a class variable)
     std::atomic<bool> quit;
     int tc, wsms;
     TaskDispatcher() { throw; }
     TaskDispatcher(int thread_count, int worker_sleep_ms) : tc(thread_count), wsms(worker_sleep_ms) {
-        qsize.store(0);
         quit.store(false);
     }
     ~TaskDispatcher() {
-        quit = true;
+        quit.store(true);
     }
 
     void init() { // This allows us to call shared_from_this
@@ -113,24 +112,19 @@ public:
         quit = true;
     }
 
-    void post(Task t)
+    void post(Task *t)
     {
-        qsize++;
-        tasks.push(t);
+        if (!tasks.push(t))
+        {
+            throw; // Error
+        }
     }
 
-    boost::any next_task()
+    void next_task(Task *t)
     {
-        if (qsize.load() > 0)
+        if (!tasks.pop(t))
         {
-            qsize--;
-            boost::any t = tasks.front();
-            tasks.pop();
-            return t;
-        }
-        else
-        {
-            throw; // Handled in TaskWorker::operator()() (see worker.hpp)
+            throw; // Handled by the TaskWorker object asking for a task
         }
     }
 };

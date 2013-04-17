@@ -40,6 +40,9 @@ int main(int argc, char *argv[])
 	
     int stp = FS_DEF;
 
+    if (argc < 2) { std::cerr << "Not enough arguments" << std::endl; return -1; }
+    int THREAD_COUNT = atoi(argv[1]);
+    if (THREAD_COUNT != -1 && THREAD_COUNT < 2) { std::cerr << "Thread count (argv[1]) : either -1 (simulate only threads, may hang) or >= 2" << std::endl; return -2; }
 
 	// normal
 
@@ -108,11 +111,17 @@ int main(int argc, char *argv[])
     psp = std::chrono::high_resolution_clock::now();
     std::cout << (std::chrono::nanoseconds(psp - pst).count()/1000) << " µs [microseconds]" << std::endl;
 
-    std::cout << "\tTesting parallel::p_sort_allthreads - reversing order took ";
+    std::cout << "\tTesting parallel::p_sort_nthreads with argv[1] (" << THREAD_COUNT << ") threads - reversing order took ";
+    pst = std::chrono::high_resolution_clock::now();
+    parallel::p_sort_nthreads(asyncfloatvec.begin(), asyncfloatvec.end(), [](float const& a, float const& b){ return a > b; }, THREAD_COUNT);
+    psp = std::chrono::high_resolution_clock::now();
+    std::cout << (std::chrono::nanoseconds(psp - pst).count()/1000) << " µs [microseconds]" << std::endl;
+
+    /*std::cout << "\tTesting parallel::p_sort_allthreads - reversing order took ";
     pst = std::chrono::high_resolution_clock::now();
     parallel::p_sort_allthreads(asyncfloatvec.begin(), asyncfloatvec.end(), [](float const& a, float const& b){ return a > b; });
     psp = std::chrono::high_resolution_clock::now();
-    std::cout << (std::chrono::nanoseconds(psp - pst).count()/1000) << " µs [microseconds]" << std::endl;
+    std::cout << (std::chrono::nanoseconds(psp - pst).count()/1000) << " µs [microseconds]" << std::endl;*/
 
     stop = std::chrono::high_resolution_clock::now(); // Stop timing
 	std::cout << "Finished parallel tasks: Time: " << (std::chrono::nanoseconds(stop - start).count()/1000) << "µs [microseconds]" << std::endl;
